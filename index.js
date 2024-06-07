@@ -1,24 +1,23 @@
+require('dotenv').config();
 const express = require('express');
 const TelegramBot = require('node-telegram-bot-api');
 const axios = require('axios');
 const fs = require('fs');
 const path = require('path');
 const { table } = require('table');
-const bodyParser = require('body-parser');
-const keep_alive = require('./alive.js') 
+
+// Enable promise cancellation
+process.env.NTBA_FIX_319 = 1;
 
 // Initialize Express app
 const app = express();
-app.use(bodyParser.json());
+const port = process.env.PORT || 3000;
 
 // Bot token
-const token = '7356587031:AAGvGesBkSwXTE1NkA5YmjB9ZcozNjtp3Xc';
-
-
-// Initialize bot
+const token = process.env.TELEGRAM_BOT_TOKEN;
 const bot = new TelegramBot(token, { polling: true });
 
-// Helper functions
+// Function to read data from JSON file
 function readData(chatId) {
     const storageDir = path.join(__dirname, 'storage', String(chatId));
     const filePath = path.join(storageDir, 'data.json');
@@ -31,6 +30,7 @@ function readData(chatId) {
     return null;
 }
 
+// Function to extract IP, country, and AS information from JSON data
 function extractInfo(data) {
     const extractedData = [];
     const seenIPs = new Set();
@@ -49,10 +49,12 @@ function extractInfo(data) {
     return extractedData;
 }
 
+// Function to send formatted Telegram message
 async function kirimrapi(chatId, text) {
     await bot.sendMessage(chatId, '\n```\n' + text + '\n```', { parse_mode: 'Markdown' });
 }
 
+// Function to save email and password to userdata folder
 function saveUserData(chatId, email, password) {
     const userDataDir = path.join(__dirname, 'userdata', String(chatId));
     if (!fs.existsSync(userDataDir)) {
@@ -66,20 +68,22 @@ function saveUserData(chatId, email, password) {
     fs.writeFileSync(passwordFilePath, password);
 }
 
+// Function to delete email and password from system
 function deleteUserData(chatId) {
     const userDataDir = path.join(__dirname, 'userdata', String(chatId));
     if (fs.existsSync(userDataDir)) {
         try {
             fs.rmSync(userDataDir, { recursive: true, force: true });
-            return true;
+            return true; // Successfully deleted
         } catch (error) {
-            console.error("Gagal menghapus user data:", error);
-            return false;
+            console.error("Failed to delete user data:", error);
+            return false; // Failed to delete
         }
     }
-    return false;
+    return false; // No user data found
 }
 
+// Function to read email from file
 function readEmail(chatId) {
     const emailFilePath = path.join(__dirname, 'userdata', String(chatId), `email_${chatId}.txt`);
     if (fs.existsSync(emailFilePath)) {
@@ -88,6 +92,7 @@ function readEmail(chatId) {
     return null;
 }
 
+// Function to read password from file
 function readPassword(chatId) {
     const passwordFilePath = path.join(__dirname, 'userdata', String(chatId), `password_${chatId}.txt`);
     if (fs.existsSync(passwordFilePath)) {
@@ -96,11 +101,13 @@ function readPassword(chatId) {
     return null;
 }
 
+// Function to save cookie to file
 function saveCookie(chatId, cookie) {
     const cookieFilePath = path.join(__dirname, 'userdata', String(chatId), `cookie_${chatId}.txt`);
     fs.writeFileSync(cookieFilePath, cookie);
 }
 
+// Function to read cookie from file
 function readCookie(chatId) {
     const cookieFilePath = path.join(__dirname, 'userdata', String(chatId), `cookie_${chatId}.txt`);
     if (fs.existsSync(cookieFilePath)) {
@@ -139,6 +146,7 @@ async function GET(url, cookie) {
     }
 }
 
+// Function to save data from each page to JSON file
 async function getDataFromPages(chatId, maxPage, cookie) {
     const storageDir = path.join(__dirname, 'storage', String(chatId));
     if (!fs.existsSync(storageDir)) {
@@ -158,22 +166,23 @@ async function getDataFromPages(chatId, maxPage, cookie) {
             if (response && response.data) {
                 const filePath = path.join(storageDir, `ip_${page}.json`);
                 fs.writeFileSync(filePath, JSON.stringify(response.data.events, null, 2));
-                await bot.sendMessage(chatId, `Data dari Halaman ${page} berhasil diambil dan disimpan sebagai ip_${page}.json`);
+                await bot.sendMessage(chatId, `Data from page ${page} successfully retrieved and saved as ip_${page}.json`);
+
             } else {
-                await bot.sendMessage(chatId, `Gagal mengambil data dari Halaman ${page}`);
+                await bot.sendMessage(chatId, `Failed to retrieve data from page ${page}`);
             }
         } catch (error) {
             console.error(`Error fetching URL ${getUrl}:`, error);
-            await bot.sendMessage(chatId, `Gagal mengambil data dari Halaman ${page} karena kesalahan.`);
+            await bot.sendMessage(chatId, `Failed to retrieve data from page ${page} due to an error.`);
         }
     }
 }
 
-// Bot message handler
+// Bot actions when receiving messages
 bot.on('message', async (msg) => {
     const chatId = msg.chat.id;
     const message = msg.text.toString().trim();
-    const userName = msg.from.username || msg.from.first_name || "Pengguna";
+    const userName = msg.from.username || msg.from.first_name || "User";
 
     if (message.startsWith('/start')) {
         const email = readEmail(chatId);
@@ -192,13 +201,13 @@ bot.on('message', async (msg) => {
             const requestsLeft = data.results[0].requests_left;
 
             const welcome = `
-SELAMAT DATANG DI EDGE SCRAPE
+WELCOME TO EDGE SCRAPE
  
- • Username : ${userName}
- • Email    : ${email}
- • Limit Bulanan : ${requestsLeft}
+ • Username: ${userName}
+ • Email: ${email}
+ • Monthly Limit: ${requestsLeft}
  
- INGPO
+ INFO
  
  - /setakun xx@gmail.com@12345
  - /hapusakun
@@ -208,69 +217,90 @@ SELAMAT DATANG DI EDGE SCRAPE
             await kirimrapi(chatId, welcome);
 
         } else {
-            await bot.sendMessage(chatId, 'Halo! Silakan kirimkan email dan password Anda dalam format:\nemail:password');
+            await bot.sendMessage(chatId, 'Hello! Please send your email and password in the format:\nemail:password');
         }
     } else if (message.startsWith('/atasilimit')) {
-        const atasi = `Apabila limit kamu sudah habis, karena untuk mereset limit perlu 1 bulan. Gunakan cara ini :
+        const atasi = `If your limit has been exhausted, because resetting the limit takes 1 month, use this method:
 
-1. Silakan logout dari web https://www.binaryedge.io/ 
-2. Silakan buat kembali Account dengan email lain
-3. Jika tidak punya maka tambahkan titik pada email (e.xample@gmail.com) 
-4. Silakan Verifikasi akun pada web
-5. Setelah succes verifikasi gunakan /hapusakun
-6. Kemudian /setakun e.xample@gmail.com@password
-7. Gunakan /start apakah succes login
-`
-        bot.sendMessage(chatId, atasi);
-    } else if (message.startsWith('/contohquery')) {
-        const kata = `
-CONTOH QUERY 
-  
-product:cloudflare && port:443 && headers:"CF-RAY" && headers:"Content-Length: 155" && response:"HTTP/1.1 400 Bad Request" && country:"SG"`
-        await kirimrapi(chatId, kata);
-    } else if (message.startsWith('/deleteData')) {
+1. Log out from the website https://www.binaryedge.io/
+2. Sign up with a new email using a temporary email service
+3. Login to the bot using the new email and the limit will be refreshed`;
+        await kirimrapi(chatId, atasi);
+
+    } else if (message.startsWith('/hapusakun')) {
         const success = deleteUserData(chatId);
         if (success) {
-            await bot.sendMessage(chatId, 'Data email dan password Anda berhasil dihapus!');
+            await bot.sendMessage(chatId, "Your data has been successfully deleted from the system.");
         } else {
-            await bot.sendMessage(chatId, 'Tidak ada data email dan password yang ditemukan.');
+            await bot.sendMessage(chatId, "Failed to delete your data. Maybe it has already been deleted.");
         }
-    } else if (message.includes(':')) {
-        const [email, password] = message.split(':');
-        saveUserData(chatId, email, password);
-        const postUrl = 'https://api.app.binaryedge.io/v2/user/login/';
-        const postData = { email, password };
-        const postResponse = await POST(postUrl, postData);
-        console.log(postResponse);
-        if (postResponse && postResponse.token) {
-            const cookie = `JWT ${postResponse.token}`;
-            saveCookie(chatId, cookie);
-            await bot.sendMessage(chatId, 'Login berhasil!');
-        } else {
-            await bot.sendMessage(chatId, 'Login gagal. Silakan coba lagi.');
-        }
-    } else if (message.startsWith('/getdata')) {
-        const query = message.split(' ').slice(1).join(' ');
-        const email = readEmail(chatId);
-        const cookie = readCookie(chatId);
+    } else if (message.startsWith('/contohquery')) {
+        const contoh = `
+Here are some example queries for BinaryEdge API:
+ 
+1. Search for web services with Cloudflare protection:
+   \`product:cloudflare && port:443\`
 
-        if (query.length === 0) {
-            await bot.sendMessage(chatId, "Query tidak boleh kosong. Silakan masukkan query setelah perintah '/getdata'.");
-        } else if (query.length < 3) {
-            await bot.sendMessage(chatId, "Query harus terdiri dari minimal 3 huruf. Silakan masukkan query yang valid.");
-        } else if (query.length >= 3 && query.length < 5) {
-            await bot.sendMessage(chatId, "Query harus terdiri dari minimal 5 huruf jika lebih dari satu kata. Silakan masukkan query yang valid.");
-        } else if (!email && !cookie) {
-            await bot.sendMessage(chatId, 'Silakan login terlebih dahulu dengan mengirim email dan password.');
-        } else {
-            const maxPage = 4;
-            await getDataFromPages(chatId, maxPage, cookie);
+2. Search for vulnerable servers with specific headers:
+   \`headers:"CF-RAY" && headers:"Content-Length: 155"\`
+
+3. Search for open ports and services on IP ranges:
+   \`ip:192.168.0.0/16 && port:22\`
+
+4. Search for specific response codes in HTTP responses:
+   \`response:"HTTP/1.1 200 OK"\`
+
+Customize these queries based on your needs and refer to the BinaryEdge API documentation for more details.`;
+        await kirimrapi(chatId, contoh);
+
+    } else if (message.startsWith('/setakun')) {
+        const akun = message.split(' ')[1];
+        if (!akun || !akun.includes('@') || !akun.includes(':')) {
+            await bot.sendMessage(chatId, 'Please send your email and password in the correct format:\n/setakun email:password');
+            return;
         }
+        const [email, password] = akun.split(':');
+        saveUserData(chatId, email, password);
+        await bot.sendMessage(chatId, `Account set successfully for email: ${email}`);
+    } else if (message.startsWith('/getdata')) {
+        const cookie = readCookie(chatId);
+        const limiturl = "https://api.app.binaryedge.io/v2/subscriptions/user/";
+        const limitku = await GET(limiturl, cookie);
+        const limitmu = JSON.stringify(limitku);
+        const data = JSON.parse(limitmu);
+        const requestsLeft = data.results[0].requests_left;
+        const maxPage = Math.ceil(requestsLeft / 25);
+        await getDataFromPages(chatId, maxPage, cookie);
+
+        // Process and extract data from the saved JSON files
+        const storageDir = path.join(__dirname, 'storage', String(chatId));
+        const combinedData = [];
+
+        for (let page = 1; page <= maxPage; page++) {
+            const filePath = path.join(storageDir, `ip_${page}.json`);
+            if (fs.existsSync(filePath)) {
+                const fileContent = fs.readFileSync(filePath, 'utf8');
+                const pageData = JSON.parse(fileContent);
+                combinedData.push(...pageData);
+            }
+        }
+
+        const extractedInfo = extractInfo(combinedData);
+        const tableData = extractedInfo.map(info => [info.ip, info.country, info.as_name]);
+        const tableConfig = {
+            header: {
+                alignment: 'center',
+                content: 'Extracted Data'
+            }
+        };
+        const output = table([['IP', 'Country', 'AS Name'], ...tableData], tableConfig);
+        await kirimrapi(chatId, output);
+    } else {
+        await bot.sendMessage(chatId, "Sorry, I didn't understand that command.");
     }
 });
 
 // Start the Express server
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-    console.log(`Server is running on port ${PORT}`);
+app.listen(port, () => {
+    console.log(`Server running on port ${port}`);
 });
