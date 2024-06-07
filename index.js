@@ -5,6 +5,7 @@ const fs = require('fs');
 const path = require('path');
 const { table } = require('table');
 const bodyParser = require('body-parser');
+const keep_alive = require('./alive.js') 
 
 // Initialize Express app
 const app = express();
