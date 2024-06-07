@@ -12,7 +12,8 @@ const app = express();
 app.use(bodyParser.json());
 
 // Bot token
-const token = 'YOUR_TELEGRAM_BOT_TOKEN';
+const token = '7356587031:AAGvGesBkSwXTE1NkA5YmjB9ZcozNjtp3Xc';
+
 
 // Initialize bot
 const bot = new TelegramBot(token, { polling: true });
